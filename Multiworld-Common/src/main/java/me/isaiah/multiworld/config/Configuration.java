@@ -27,7 +27,8 @@ public class Configuration {
     /**
      */
     public <T> T getOrDefault(String key, T defaul) {
-        return (T) (Object)contentMap.get(key);
+        Object val = contentMap.get(key);
+        return val != null ? (T) val : defaul;
     }
 
     /**
@@ -45,31 +46,72 @@ public class Configuration {
     /**
      */
     public String getString(String key) {
-        return (String) contentMap.get(key);
+        Object o = contentMap.get(key);
+        if (o == null) return null;
+        if (o instanceof String) return (String) o;
+        return String.valueOf(o);
     }
 
     /**
      */
     public boolean getBoolean(String key) {
-        return (Boolean) contentMap.get(key);
+        Object o = contentMap.get(key);
+        if (o == null) return false;
+        if (o instanceof Boolean) return (Boolean) o;
+        if (o instanceof String) return Boolean.parseBoolean((String) o);
+        return false;
     }
 
     /**
      */
     public int getInt(String key) {
-        return (Integer) (Object)contentMap.get(key);
+        Object o = contentMap.get(key);
+        if (o == null) return 0;
+        if (o instanceof Number) return ((Number) o).intValue();
+        if (o instanceof String) {
+            try {
+                return Integer.parseInt((String) o);
+            } catch (NumberFormatException e) {
+                try {
+                    return (int) Long.parseLong((String) o);
+                } catch (NumberFormatException ex) {
+                    return 0;
+                }
+            }
+        }
+        return 0;
     }
 
     /**
      */
     public double getDouble(String key) {
-        return (Double) contentMap.get(key);
+        Object o = contentMap.get(key);
+        if (o == null) return 0.0d;
+        if (o instanceof Number) return ((Number) o).doubleValue();
+        if (o instanceof String) {
+            try {
+                return Double.parseDouble((String) o);
+            } catch (NumberFormatException e) {
+                return 0.0d;
+            }
+        }
+        return 0.0d;
     }
 
     /**
      */
     public long getLong(String key) {
-        return (Long) contentMap.get(key);
+        Object o = contentMap.get(key);
+        if (o == null) return 0L;
+        if (o instanceof Number) return ((Number) o).longValue();
+        if (o instanceof String) {
+            try {
+                return Long.parseLong((String) o);
+            } catch (NumberFormatException e) {
+                return 0L;
+            }
+        }
+        return 0L;
     }
     
     /**

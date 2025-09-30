@@ -211,10 +211,10 @@ public class CreateCommand implements Command {
      * Load an existing saved World from config (YAML) 
      */
 	public static void reinit_world_from_config(MinecraftServer mc, String id) {
-		File config_dir = new File("config");
+        File config_dir = new File("config");
         config_dir.mkdirs();
-		
-		String[] spl = id.split(":");
+        
+        String[] spl = id.split(":");
         
         File cf = new File(config_dir, "multiworld"); 
         cf.mkdirs();
@@ -228,85 +228,89 @@ public class CreateCommand implements Command {
         File wc = new File(namespace, spl[1] + ".yml");
         FileConfiguration config;
         try {
-			if (!wc.exists()) {
-				wc.createNewFile();
-			}
+            if (!wc.exists()) {
+                LOGGER.warn("World config not found for '{}', skipping restore: {}", id, wc.getAbsolutePath());
+                return;
+            }
             config = new FileConfiguration(wc);
-			String env = config.getString("environment");
-			long seed = 0;
-			
-			try {
-				seed = config.getLong("seed");
-			} catch (Exception e) {
-				seed = config.getInt("seed");
-			}
 
-			ChunkGenerator gen = get_chunk_gen(mc, env);
-		    Identifier dim = get_dim_id(env);
-		    
-		    if (null == dim) {
-		    	dim = Util.OVERWORLD_ID;
-		    }
-			
-			Difficulty d = Difficulty.NORMAL;
+            // Environment
+            String env = config.getString("environment");
+            if (env == null || env.isEmpty()) {
+                LOGGER.warn("Missing 'environment' in config for '{}', defaulting to NORMAL", id);
+                env = "NORMAL";
+            }
 
-			// Set saved Difficulty
-			if (config.is_set("difficulty")) {
-				String di = config.getString("difficulty");
+            // Seed (may be long/int/string)
+            long seed = 0L;
+            if (config.is_set("seed")) {
+                try {
+                    seed = config.getLong("seed");
+                } catch (Exception e) {
+                    seed = config.getInt("seed");
+                }
+            }
 
-				// String to Difficulty
-				if (di.equalsIgnoreCase("EASY"))     { d = Difficulty.EASY; }
-				if (di.equalsIgnoreCase("HARD"))     { d = Difficulty.HARD; }
-				if (di.equalsIgnoreCase("NORMAL"))   { d = Difficulty.NORMAL; }
-				if (di.equalsIgnoreCase("PEACEFUL")) { d = Difficulty.PEACEFUL; }
-			}
+            // Resolve generator and dimension
+            ChunkGenerator gen = get_chunk_gen(mc, env);
+            Identifier dim = get_dim_id(env);
+            if (dim == null) {
+                dim = Util.OVERWORLD_ID;
+            }
 
-			// Gen
-			if (config.is_set("custom_generator")) {
-				String cg = config.getString("custom_generator");
-				
-				ChunkGenerator gen1 = get_chunk_gen(mc, cg);
-        		if (null != gen1) {
-        			gen = gen1;
-        		} else {
-        			System.out.println("Invalid ChunkGenerator: \"" + cg + "\"");
-        		}
-			}
-			
-			ServerWorld world = MultiworldMod.create_world(id, dim, gen, d, seed);
+            // Difficulty (default NORMAL)
+            Difficulty d = Difficulty.NORMAL;
+            if (config.is_set("difficulty")) {
+                String di = config.getString("difficulty");
+                if (di != null) {
+                    if (di.equalsIgnoreCase("EASY"))     d = Difficulty.EASY;
+                    else if (di.equalsIgnoreCase("HARD"))     d = Difficulty.HARD;
+                    else if (di.equalsIgnoreCase("NORMAL"))   d = Difficulty.NORMAL;
+                    else if (di.equalsIgnoreCase("PEACEFUL")) d = Difficulty.PEACEFUL;
+                }
+            }
 
-			MultiworldMod.get_world_creator().set_difficulty(id, d);
-			
-			if (GameruleCommand.keys.size() == 0) {
-				GameruleCommand.setupServer(MultiworldMod.mc);
-			}
+            // Optional custom generator override
+            if (config.is_set("custom_generator")) {
+                String cg = config.getString("custom_generator");
+                if (cg != null && !cg.isEmpty()) {
+                    ChunkGenerator gen1 = get_chunk_gen(mc, cg);
+                    if (gen1 != null) {
+                        gen = gen1;
+                    } else {
+                        LOGGER.warn("Invalid custom_generator '{}' for '{}', using default generator", cg, id);
+                    }
+                }
+            }
 
-			// Set Gamerules
-			for (String name : GameruleCommand.keys.keySet()) {
-				String key = "gamerule_" + name;
-				
-				if (config.is_set(key)) {
-					
-					Object o = config.getObject(key);
-					
-					// BoleanRule
-					if (o instanceof Boolean) {
-						o = ((Boolean) o) ? "true" : "false";
-					}
-					
-					// IntRule
-					if (o instanceof Integer) {
-						o = String.valueOf((Integer) o);
-					}
-					
-					GameruleCommand.set_gamerule_from_cfg(world, key, (String) o);
-				}
-			}
-			
+            // Create world and apply difficulty
+            ServerWorld world = MultiworldMod.create_world(id, dim, gen, d, seed);
+            MultiworldMod.get_world_creator().set_difficulty(id, d);
+
+            // Ensure gamerule keys are populated
+            if (GameruleCommand.keys.size() == 0) {
+                GameruleCommand.setupServer(MultiworldMod.mc);
+            }
+
+            // Apply gamerules from config
+            for (String name : GameruleCommand.keys.keySet()) {
+                String key = "gamerule_" + name;
+                if (config.is_set(key)) {
+                    Object o = config.getObject(key);
+                    if (o instanceof Boolean) {
+                        o = ((Boolean) o) ? "true" : "false";
+                    } else if (o instanceof Number) {
+                        o = o.toString();
+                    } else if (!(o instanceof String)) {
+                        o = String.valueOf(o);
+                    }
+                    GameruleCommand.set_gamerule_from_cfg(world, key, (String) o);
+                }
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
-	}
+    }
 	
 	/**
 	 * Saves the World Info to a YAML Config File, to be loaded by

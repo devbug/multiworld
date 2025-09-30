@@ -194,8 +194,9 @@ public class FileConfiguration extends Configuration {
     private Object parseLine(String val) {
         if (val.equalsIgnoreCase("true") || val.equalsIgnoreCase("false")) return Boolean.valueOf(val);
         else {
-            try { return Integer.valueOf(val);} catch (NumberFormatException ignore){}
+            // Prefer Long first to reduce int/long type inconsistencies across saves/loads
             try { return Long.valueOf(val);   } catch (NumberFormatException ignore){}
+            try { return Integer.valueOf(val);} catch (NumberFormatException ignore){}
             try { return Double.valueOf(val); } catch (NumberFormatException ignore){}
             return val;
         }
