@@ -54,9 +54,7 @@ final class RuntimeWorldManager {
 
         // this.serverAccess.getWorlds().put(world.getRegistryKey(), world);
         // ServerWorldEvents.LOAD.invoker().onWorldLoad(this.server, world);
-        
-        // tick the world to ensure it is ready for use right away
-        world.tick(() -> true);
+        // Avoid ticking here; the base server loop will tick the world shortly.
 
         return world;
     }
@@ -84,6 +82,9 @@ final class RuntimeWorldManager {
                 }
             }
         }
+
+        // Keep internal map in sync
+        this.worldss.remove(dimensionKey);
     }
 
     private static SimpleRegistry<DimensionOptions> getDimensionsRegistry(MinecraftServer server) {

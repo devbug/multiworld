@@ -9,6 +9,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.*;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import me.isaiah.multiworld.MultiworldMod;
 
 //@Mod("fantasy")
 public final class FantasyInitializer {
@@ -52,11 +53,10 @@ public final class FantasyInitializer {
     
     @SubscribeEvent
     public void handleTickEvent(ServerTickEvent.Pre event) {
-        Fantasy fantasy = Fantasy.get(mc);
-        fantasy.tick();
-        for (ServerWorld w : fantasy.worldManager.worldss.values()) {
-            w.tick(() -> true);
-        }
+        // Removed duplicated ticking. MixinMinecraftServer already calls Fantasy.tick(),
+        // and the base server loop ticks all ServerWorld instances.
+        // Process pending world restores gradually to avoid heavy work in a single tick
+        MultiworldMod.processPendingRestores(1);
     }
     
     @SubscribeEvent

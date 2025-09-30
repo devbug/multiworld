@@ -10,6 +10,10 @@ import static net.minecraft.server.command.CommandManager.argument;
 import static net.minecraft.server.command.CommandManager.literal;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +55,10 @@ public class MultiworldMod {
     public static MinecraftServer mc;
     public static String CMD = "mw";
     public static ICreator world_creator;
+    private static final List<String> PENDING_WORLD_RESTORES = new ArrayList<>();
+    private static int RESTORE_DELAY_TICKS = 60; // delay restores ~3s after server start (at 20 TPS)
+    private static int restoreDelayLeft = 0;
+    private static final long RESTORE_TICK_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(10); // 10ms budget per tick
     
     public static String[] COMMAND_HELP = {
     		"&4Multiworld Mod Commands:&r",
@@ -111,18 +119,24 @@ public class MultiworldMod {
 		if (cfg_folder.exists()) {
 			File folder = new File(cfg_folder, "multiworld");
 			File worlds = new File(folder, "worlds");
+			List<String> found = new ArrayList<>();
 			if (worlds.exists()) {
 				for (File f : worlds.listFiles()) {
 					if (f.getName().equals("minecraft")) {
 						continue;
 					}
 					for (File fi : f.listFiles()) {
+						if (!fi.getName().endsWith(".yml")) continue;
 						String id = f.getName() + ":" + fi.getName().replace(".yml", "");
 						LOGGER.info("Found saved world " + id);
-						CreateCommand.reinit_world_from_config(mc, id);
+						found.add(id);
 					}
 				}
 			}
+			// Enqueue restores to spread work across ticks
+			enqueue_world_restores(found);
+			// initialize delay before starting restores to avoid competing with startup work
+			restoreDelayLeft = RESTORE_DELAY_TICKS;
 			
 			int loaded = Portal.reinit_portals_from_config(mc);
 			if (loaded > 0) {
@@ -130,6 +144,37 @@ public class MultiworldMod {
 			}
 		}
     }
+
+	public static void enqueue_world_restores(Collection<String> ids) {
+		if (ids == null) return;
+		PENDING_WORLD_RESTORES.addAll(ids);
+	}
+
+	// Called per tick by platform layer to avoid heavy work in a single tick
+	public static void processPendingRestores(int maxPerTick) {
+		if (PENDING_WORLD_RESTORES.isEmpty()) return;
+		if (restoreDelayLeft > 0) {
+			restoreDelayLeft--;
+			return;
+		}
+		int n = Math.max(1, maxPerTick);
+		long start = System.nanoTime();
+		int restored = 0;
+		while (!PENDING_WORLD_RESTORES.isEmpty() && restored < n) {
+			// stop if we exceed our per-tick time budget
+			if (System.nanoTime() - start > RESTORE_TICK_BUDGET_NANOS) break;
+			String id = PENDING_WORLD_RESTORES.remove(0);
+			try {
+				long s = System.nanoTime();
+				CreateCommand.reinit_world_from_config(mc, id);
+				long durMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - s);
+				LOGGER.info("Restored world {} in {} ms", id, durMs);
+			} catch (Exception e) {
+				LOGGER.error("Failed to restore world {}", id, e);
+			}
+			restored++;
+		}
+	}
 
     public static ServerPlayerEntity get_player(ServerCommandSource s) throws CommandSyntaxException {
     	ServerPlayerEntity plr = s.getPlayer();
